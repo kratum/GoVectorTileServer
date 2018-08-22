@@ -1,0 +1,9 @@
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteCond %{ENV:HTTPS} !=on
+RewriteRule .* https://%{SERVER_NAME}%{REQUEST_URI} [R=301,L]
+
+AuthType Basic
+AuthName "Geheimer Bereich"
+AuthUserFile /var/www/virtual/kratum/.htuser
+Require valid-user

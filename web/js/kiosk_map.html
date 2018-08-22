@@ -1,0 +1,46 @@
+{% extends "kio/base.html" %}
+{% load staticfiles %}
+
+{% block content %}
+<div class="container">
+	<div class="row">
+		<div class="col-md-8 col-md-offset-2">
+			<div id="map"></div>
+			<button type="button" class="btn btn-default" id="button_get_location" value="Submit" />Get Location</button>
+		</div>
+	</div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+    <script src="{% static 'kio/js/leaflet.js' %}"></script>
+	<script src="{% static 'kio/js/script.js' %}"></script>
+	
+	<script>
+		map.setView([50.933972770181754, 6.965503692626954], 14)
+
+		{% for kiosk in object_list %}
+				markerGroup.addLayer(L.marker(L.latLng({{ kiosk.y }}, {{ kiosk.x }})).bindPopup('<a href="/{{kiosk.id}}">{{kiosk.name}}</a>').addTo(map))
+		{% endfor %}
+
+		$(function() {
+			$( "#button_get_location" ).click(function() {
+				navigator.geolocation.getCurrentPosition(
+				    function(position) {
+						map.setView(L.latLng(position.coords.latitude, position.coords.longitude));
+					    
+					    var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+						url += '&lat='+position.coords.latitude.toFixed(6)
+						url += '&lon='+position.coords.longitude.toFixed(6)
+					    $.ajax({url: url, success: function(result){
+			    		    console.log(result.address.road)
+			    		    console.log(result.address.house_number)
+			    		    console.log(result.address.postcode)
+			    		}});
+				    }
+				)
+			});
+		});
+	</script>
+
+{% endblock %}

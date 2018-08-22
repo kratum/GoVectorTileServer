@@ -1,0 +1,111 @@
+{% extends "kio/base.html" %}
+{% load staticfiles %}
+{% load bootstrap3 %}
+
+
+{% block content %}
+{% if user.is_authenticated %}
+
+<div class="container">
+
+	<div class="row">
+		<div class="col-md-4 col-md-offset-2 well">
+			<h3>Select the location or get your current one</h3>
+			<div id="map"></div>
+			<button type="button" class="btn btn-default" id="button_get_location" value="Submit" />Get Location</button>
+		</div>
+		
+		<div class="col-md-4 well">
+			<h3>Please leave some contextual information</h3>
+			<form method="post" enctype="multipart/form-data">
+			  {% csrf_token %}
+			  {% bootstrap_form kiosk_form %}
+			  <p>Thats it, thank you and cheers</p>
+			<input type="submit" class="btn btn-default" name="kiosk_form" value="Submit" />
+			</form>
+		</div>
+	</div>
+	
+	<div class="row">
+		<div class="col-xs-6 col-md-3">
+			{% for image in kiosk_imagelist %}
+			<a href="#" class="thumbnail">
+				<img src="../../media/{{image.document}}" class="img-thumbnail" width="150px" alt="Responsive image">
+			</a>
+			{% endfor %}
+		</div>
+	</div>
+	
+</div>
+
+{% endif %}
+{% endblock %}
+
+
+{% block footer %}
+
+{% endblock %}
+
+
+{% block javascript %}
+    <script src="{% static 'kio/js/leaflet.js' %}"></script>
+    <script src="{% static 'kio/js/proj4.js' %}"></script>
+    <script src="{% static 'kio/js/proj4leaflet.js' %}"></script>
+	<script src="{% static 'kio/js/script.js' %}"></script>
+
+	<script>
+		
+		map.setView([50.933972770181754, 6.965503692626954], 14)
+		{% if kiosk %}
+			markerGroup.addLayer(L.marker(L.latLng({{ kiosk.y }}, {{ kiosk.x }})).bindPopup('<a href="/{{kiosk.id}}">{{kiosk.name}}</a>').addTo(map))
+			map.fitBounds(markerGroup.getBounds());
+		{% endif %}
+
+		map.on('contextmenu', function(ev) {
+			markerGroup.clearLayers()
+		    markerGroup.addLayer(L.marker(L.latLng(ev.latlng.lat, ev.latlng.lng)).bindPopup('<a href="/{{kiosk.id}}">{{kiosk.name}}</a>').addTo(map))
+		    $("#id_y").val(ev.latlng.lat.toFixed(6))
+		    $("#id_x").val(ev.latlng.lng.toFixed(6))
+		    
+		    var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+			url += '&lat='+ev.latlng.lat.toFixed(6)
+			url += '&lon='+ev.latlng.lng.toFixed(6)
+		    $.ajax({url: url,
+    			crossDomain: true,
+   				dataType: 'json',
+		    	success: function(result){
+    		    $("#id_street").val(result.address.road)
+    		    $("#id_hausnummer").val(result.address.house_number)
+    		    $("#id_plz").val(result.address.postcode)
+    		}});
+
+		});
+
+		$(function() {
+			$( "#button_get_location" ).click(function() {
+				markerGroup.clearLayers()
+				navigator.geolocation.getCurrentPosition(
+				    function(position) {
+						markerGroup.addLayer(L.marker(L.latLng(position.coords.latitude, position.coords.longitude)).addTo(map))
+						map.fitBounds(markerGroup.getBounds(),  {maxZoom:17});
+					    $("#id_y").val(position.coords.latitude.toFixed(6))
+					    $("#id_x").val(position.coords.longitude.toFixed(6))
+					    
+					    var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+						url += '&lat='+position.coords.latitude.toFixed(6)
+						url += '&lon='+position.coords.longitude.toFixed(6)
+					    $.ajax({url: url, success: function(result){
+			    		    $("#id_street").val(result.address.road)
+			    		    $("#id_hausnummer").val(result.address.house_number)
+			    		    $("#id_plz").val(result.address.postcode)
+			    		}});
+				    }
+				)
+			});
+		});
+
+
+
+	</script>
+
+{% endblock %}

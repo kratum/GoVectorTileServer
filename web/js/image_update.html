@@ -1,0 +1,22 @@
+{% load bootstrap3 %}
+
+<div class="modal fade" id="imageUploadModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="myModalLabel">Foto Upload</h4>
+      </div>
+      <div class="modal-body">
+        <form method="post" enctype="multipart/form-data" id="image_form_buttonhandler">
+          {% csrf_token %}
+          {% bootstrap_form image_form %}       
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button type="submit" form="image_form_buttonhandler" class="btn btn-primary" name="image_form" value="Upload" />Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
