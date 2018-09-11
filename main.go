@@ -2,11 +2,14 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"io/ioutil"
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -35,7 +38,12 @@ func main() {
 
 func mvtHandler(w http.ResponseWriter, req *http.Request) {
 	db, err := sql.Open("postgres", cs)
+	check(err)
+
 	defer db.Close()
+
+	w.Header().Set("Content-Type", "application/x-protobuf")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	params := mux.Vars(req)
 
@@ -44,35 +52,55 @@ func mvtHandler(w http.ResponseWriter, req *http.Request) {
 	z, err := strconv.Atoi(params["z"])
 
 	bbox := GetBbox(x, y, z)
+	tilefolder := fmt.Sprintf("./%s/%d/%d", "cache", z, x)
+	tilepath := fmt.Sprintf("%s/%d.pbf", tilefolder, y)
 
-	stmt, err := db.Prepare(`SELECT ST_AsMVT(q, 'merged_clean_vol_poly', 4096, 'geom')
-            FROM (
-                SELECT
-                    vol,
-                    id,
-                    ST_AsMVTGeom(
-                        geom,
-                        TileBBox($1, $2, $3, 3857),
-                        4096,
-                        0,
-                        false
-                    ) geom
-                FROM merged_clean_vol_poly
-                WHERE ST_Intersects(geom, (SELECT ST_Transform(ST_MakeEnvelope($4,$5,$6,$7, 4326), 3857)))
-            ) q`)
-	check(err)
+	fmt.Println(tilefolder, tilepath)
 
-	rows, err := stmt.Query(z, x, y, bbox[0], bbox[1], bbox[2], bbox[3])
-	check(err)
+	if _, err := os.Stat(tilepath); os.IsNotExist(err) {
+		fmt.Println("Generating new Tile")
 
-	w.Header().Set("Content-Type", "application/x-protobuf")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+		stmt, err := db.Prepare(`SELECT ST_AsMVT(q, 'merged_clean_vol_poly', 4096, 'geom')
+	            FROM (
+	                SELECT
+	                    vol,
+	                    id,
+	                    ST_AsMVTGeom(
+	                        geom,
+	                        TileBBox($1, $2, $3, 3857),
+	                        4096,
+	                        0,
+	                        false
+	                    ) geom
+	                FROM merged_clean_vol_poly
+	                WHERE ST_Intersects(geom, (SELECT ST_Transform(ST_MakeEnvelope($4,$5,$6,$7, 4326), 3857)))
+	            ) q`)
+		check(err)
 
-	for rows.Next() {
-		var st_asmvt string
-		err = rows.Scan(&st_asmvt)
-		w.Write([]byte(st_asmvt))
+		rows, err := stmt.Query(z, x, y, bbox[0], bbox[1], bbox[2], bbox[3])
+		check(err)
+
+		for rows.Next() {
+			var st_asmvt string
+			err = rows.Scan(&st_asmvt)
+			check(err)
+			w.Write([]byte(st_asmvt))
+
+			if _, err := os.Stat(tilefolder); os.IsNotExist(err) {
+				os.MkdirAll(tilefolder, 1)
+			}
+			err = ioutil.WriteFile(tilepath, []byte(st_asmvt), 1)
+			check(err)
+		}
+
+		//jsonFile, err := os.Open("./data.json")
+	} else {
+		RawTile, err := os.Open(tilepath)
+		check(err)
+		tile, _ := ioutil.ReadAll(RawTile)
+		w.Write(tile)
 	}
+
 }
 
 //Errorhandling
