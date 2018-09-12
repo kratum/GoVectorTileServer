@@ -9,4 +9,4 @@ Run the Server with
 
 `go run main.go`
 
-See web/index.html to look at 
+See web/index.html to look at your data
