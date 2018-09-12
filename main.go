@@ -28,6 +28,7 @@ func init() {
 }
 
 func main() {
+
 	r := mux.NewRouter()
 	r.HandleFunc("/mvt/{z}/{y}/{x}", mvtHandler).Methods("GET", "OPTIONS")
 	r.Handle("/favicon.ico", http.NotFoundHandler())
@@ -37,10 +38,6 @@ func main() {
 }
 
 func mvtHandler(w http.ResponseWriter, req *http.Request) {
-	db, err := sql.Open("postgres", cs)
-	check(err)
-
-	defer db.Close()
 
 	w.Header().Set("Content-Type", "application/x-protobuf")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -48,58 +45,16 @@ func mvtHandler(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
 
 	x, err := strconv.Atoi(params["x"])
+	check(err)
 	y, err := strconv.Atoi(params["y"])
+	check(err)
 	z, err := strconv.Atoi(params["z"])
+	check(err)
 
 	bbox := GetBbox(x, y, z)
-	tilefolder := fmt.Sprintf("./%s/%d/%d", "cache", z, x)
-	tilepath := fmt.Sprintf("%s/%d.pbf", tilefolder, y)
+	tiles := getTiles(x, y, z, bbox)
 
-	fmt.Println(tilefolder, tilepath)
-
-	if _, err := os.Stat(tilepath); os.IsNotExist(err) {
-		fmt.Println("Generating new Tile")
-
-		stmt, err := db.Prepare(`SELECT ST_AsMVT(q, 'merged_clean_vol_poly', 4096, 'geom')
-	            FROM (
-	                SELECT
-	                    vol,
-	                    id,
-	                    ST_AsMVTGeom(
-	                        geom,
-	                        TileBBox($1, $2, $3, 3857),
-	                        4096,
-	                        0,
-	                        false
-	                    ) geom
-	                FROM merged_clean_vol_poly
-	                WHERE ST_Intersects(geom, (SELECT ST_Transform(ST_MakeEnvelope($4,$5,$6,$7, 4326), 3857)))
-	            ) q`)
-		check(err)
-
-		rows, err := stmt.Query(z, x, y, bbox[0], bbox[1], bbox[2], bbox[3])
-		check(err)
-
-		for rows.Next() {
-			var st_asmvt string
-			err = rows.Scan(&st_asmvt)
-			check(err)
-			w.Write([]byte(st_asmvt))
-
-			if _, err := os.Stat(tilefolder); os.IsNotExist(err) {
-				os.MkdirAll(tilefolder, 1)
-			}
-			err = ioutil.WriteFile(tilepath, []byte(st_asmvt), 1)
-			check(err)
-		}
-
-		//jsonFile, err := os.Open("./data.json")
-	} else {
-		RawTile, err := os.Open(tilepath)
-		check(err)
-		tile, _ := ioutil.ReadAll(RawTile)
-		w.Write(tile)
-	}
+	w.Write([]byte(tiles))
 
 }
 
@@ -128,4 +83,70 @@ func GetBbox(x int, y int, z int) []float64 {
 
 	bbox := []float64{xmin, ymin, xmax, ymax}
 	return bbox
+}
+
+// getTiles
+func getTiles(x, y, z int, bbox []float64) []byte {
+	fmt.Println("Get tiles:            ", x, y, z, bbox)
+
+	db, err := sql.Open("postgres", cs)
+	check(err)
+	defer db.Close()
+
+	var tile []byte
+
+	tilefolder := fmt.Sprintf("./%s/%d/%d", "cache", z, x)
+	tilepath := fmt.Sprintf("%s/%d.pbf", tilefolder, y)
+
+	fmt.Println(tilefolder, tilepath)
+
+	if _, err := os.Stat(tilepath); os.IsNotExist(err) {
+		fmt.Println("Generating new Tile")
+
+		stmt, err := db.Prepare(`SELECT ST_AsMVT(q, 'merged_clean_vol_poly', 4096, 'geom')
+	            FROM (
+	                SELECT
+	                    vol,
+	                    id,
+	                    first_h,
+	                    trauf_h,
+	                    ST_AsMVTGeom(
+	                        geom,
+	                        TileBBox($1, $2, $3, 3857),
+	                        4096,
+	                        0,
+	                        false
+	                    ) geom
+	                FROM merged_clean_vol_poly
+	                WHERE ST_Intersects(geom, (SELECT ST_Transform(ST_MakeEnvelope($4,$5,$6,$7, 4326), 3857)))
+	            ) q`)
+		check(err)
+
+		rows, err := stmt.Query(z, x, y, bbox[0], bbox[1], bbox[2], bbox[3])
+		check(err)
+
+		for rows.Next() {
+			var st_asmvt string
+			err = rows.Scan(&st_asmvt)
+			check(err)
+			tile = []byte(st_asmvt)
+			//w.Write([]byte(st_asmvt))
+
+			if _, err := os.Stat(tilefolder); os.IsNotExist(err) {
+				os.MkdirAll(tilefolder, 1)
+			}
+			err = ioutil.WriteFile(tilepath, []byte(st_asmvt), 1)
+			check(err)
+		}
+
+		//jsonFile, err := os.Open("./data.json")
+	} else {
+		RawTile, err := os.Open(tilepath)
+		check(err)
+		tile, _ = ioutil.ReadAll(RawTile)
+
+		//w.Write(tile)
+	}
+
+	return tile
 }
